@@ -1,7 +1,5 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
-#[cfg(target_os = "linux")]
-use crate::platform::linux::is_x11;
 use crate::{
     client::file_trait::FileManager,
     common::{make_fd_to_json, make_vec_fd_to_json},
@@ -1473,45 +1471,19 @@ pub fn main_get_main_display() -> SyncReturn<String> {
     #[cfg(not(target_os = "ios"))]
     let mut display_info = "".to_owned();
     #[cfg(not(target_os = "ios"))]
-    {
-        #[cfg(not(target_os = "linux"))]
-        let is_linux_wayland = false;
-        #[cfg(target_os = "linux")]
-        let is_linux_wayland = !is_x11();
-
-        if !is_linux_wayland {
-            if let Ok(displays) = crate::display_service::try_get_displays() {
-                // to-do: Need to detect current display index.
-                if let Some(display) = displays.iter().next() {
-                    display_info = serde_json::to_string(&HashMap::from([
-                        ("w", display.width()),
-                        ("h", display.height()),
-                    ]))
-                    .unwrap_or_default();
-                }
-            }
-        }
-
-        #[cfg(target_os = "linux")]
-        if is_linux_wayland {
-            let displays = scrap::wayland::display::get_displays();
-            if let Some(display) = displays.displays.get(displays.primary) {
-                let logical_size = display
-                    .logical_size
-                    .unwrap_or((display.width, display.height));
-                display_info = serde_json::to_string(&HashMap::from([
-                    ("w", logical_size.0),
-                    ("h", logical_size.1),
-                ]))
-                .unwrap_or_default();
-            }
+    if let Ok(displays) = crate::display_service::try_get_displays() {
+        // to-do: Need to detect current display index.
+        if let Some(display) = displays.iter().next() {
+            display_info = serde_json::to_string(&HashMap::from([
+                ("w", display.width()),
+                ("h", display.height()),
+            ]))
+            .unwrap_or_default();
         }
     }
     SyncReturn(display_info)
 }
 
-// No need to check if is on Wayland in this function.
-// The Flutter side gets display information on Wayland using a different method.
 pub fn main_get_displays() -> SyncReturn<String> {
     #[cfg(target_os = "ios")]
     let display_info = "".to_owned();
@@ -2283,6 +2255,36 @@ pub fn is_preset_password() -> bool {
 // We need this function because we want a sync return for mobile version.
 pub fn is_preset_password_mobile_only() -> SyncReturn<bool> {
     SyncReturn(is_preset_password())
+}
+
+pub fn main_set_license_key(license_key: String) {
+    let path = hbb_common::config::Config::path("key.lic");
+    if license_key.is_empty() {
+        std::fs::remove_file(path).ok();
+    } else {
+        // If the incoming string looks like a plaintext license (contains
+        // dashes and alphanumeric chars) assume it's coming from UI/native
+        // code and AVOID writing it directly to disk to prevent plaintext
+        // overwrites. Encrypted content is expected to be base64 (A-Za-z0-9+/=)
+        // and typically won't contain '-'. This is conservative: if a
+        // plaintext-like key is received, we skip writing here and let the
+        // UI layer handle secure storage (it already writes encrypted form).
+        let looks_like_plain = license_key.contains('-') && license_key.len() >= 8;
+        if looks_like_plain {
+            log::debug!("main_set_license_key: received plaintext-like key; skipping write to avoid plaintext on disk");
+        } else {
+            if let Err(e) = std::fs::write(&path, license_key) {
+                log::error!("main_set_license_key: failed to write key.lic: {}", e);
+            } else {
+                log::debug!("main_set_license_key: wrote key.lic to {:?}", path);
+            }
+        }
+    }
+}
+
+pub fn main_get_license_key() -> String {
+    let path = hbb_common::config::Config::path("key.lic");
+    std::fs::read_to_string(path).unwrap_or_default()
 }
 
 /// Send a url scheme through the ipc.
