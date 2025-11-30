@@ -1,0 +1,10 @@
+^D:\DEV\HELPDESK-TRUONGIT\FLUTTER\WINDOWS\FLUTTER\EPHEMERAL\.PLUGIN_SYMLINKS\FLUTTER_CUSTOM_CURSOR\WINDOWS\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\Microsoft Visual Studio\18\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/dev/helpdesk-truongit/flutter/windows -BD:/dev/helpdesk-truongit/flutter/windows/build --check-stamp-file D:/dev/helpdesk-truongit/flutter/windows/build/plugins/flutter_custom_cursor/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
