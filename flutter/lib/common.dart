@@ -2812,13 +2812,19 @@ class ServerConfig {
   late String relayServer;
   late String apiServer;
   late String key;
+  late String licenseKey;
+  late String hardwareId;
+  late String expiresAt;
 
   ServerConfig(
-      {String? idServer, String? relayServer, String? apiServer, String? key}) {
+      {String? idServer, String? relayServer, String? apiServer, String? key, String? licenseKey, String? hardwareId, String? expiresAt}) {
     this.idServer = idServer?.trim() ?? '';
     this.relayServer = relayServer?.trim() ?? '';
     this.apiServer = apiServer?.trim() ?? '';
     this.key = key?.trim() ?? '';
+    this.licenseKey = licenseKey?.trim() ?? '';
+    this.hardwareId = hardwareId?.trim() ?? '';
+    this.expiresAt = expiresAt?.trim() ?? '';
   }
 
   /// decode from shared string (from user shared or rustdesk-server generated)
@@ -2838,6 +2844,9 @@ class ServerConfig {
     relayServer = json['relay'] ?? '';
     apiServer = json['api'] ?? '';
     key = json['key'] ?? '';
+    licenseKey = json['licenseKey'] ?? '';
+    hardwareId = json['hardwareId'] ?? '';
+    expiresAt = json['expiresAt'] ?? '';
   }
 
   /// encode to shared string
@@ -2848,6 +2857,9 @@ class ServerConfig {
     config['relay'] = relayServer.trim();
     config['api'] = apiServer.trim();
     config['key'] = key.trim();
+    config['licenseKey'] = licenseKey.trim();
+    config['hardwareId'] = hardwareId.trim();
+    config['expiresAt'] = expiresAt.trim();
     return base64UrlEncode(Uint8List.fromList(jsonEncode(config).codeUnits))
         .split('')
         .reversed
@@ -2859,7 +2871,10 @@ class ServerConfig {
       : idServer = options['custom-rendezvous-server'] ?? "",
         relayServer = options['relay-server'] ?? "",
         apiServer = options['api-server'] ?? "",
-        key = options['key'] ?? "";
+        key = options['key'] ?? "",
+        licenseKey = options['licenseKey'] ?? "",
+        hardwareId = options['hardwareId'] ?? "",
+        expiresAt = options['expiresAt'] ?? "";
 }
 
 Widget dialogButton(String text,
@@ -3437,11 +3452,31 @@ importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
   }
 }
 
-Future<bool> setServerConfig(
-  List<TextEditingController>? controllers,
-  List<RxString>? errMsgs,
-  ServerConfig config,
-) async {
+Future<void> resetServerConfig() async{
+  try {
+    await bind.mainSetOption(key: 'key', value: '');
+    await bind.mainSetLicenseKey(licenseKey: '');
+    await bind.mainSetOption(key: 'hardwareId', value: '');
+    await bind.mainSetOption(key: 'expiresAt', value: '');
+  } catch (e) {
+    print("Invalid server config: $e");
+  }
+}
+
+Future<ServerConfig?> getServerConfig() async{
+  ServerConfig? serverConfig;
+  try {
+    Map<String, dynamic> options = jsonDecode(await bind.mainGetOptions());
+    serverConfig = ServerConfig.fromOptions(options);
+    serverConfig.licenseKey = await bind.mainGetLicenseKey();
+  } catch (e) {
+    print("Invalid server config: $e");
+  }
+  return serverConfig;
+}
+
+Future<bool> setServerConfig(List<TextEditingController>? controllers,
+    List<RxString>? errMsgs, ServerConfig config) async {
   String removeEndSlash(String input) {
     if (input.endsWith('/')) {
       return input.substring(0, input.length - 1);
@@ -3453,6 +3488,10 @@ Future<bool> setServerConfig(
   config.relayServer = removeEndSlash(config.relayServer.trim());
   config.apiServer = removeEndSlash(config.apiServer.trim());
   config.key = config.key.trim();
+  config.licenseKey = config.licenseKey.trim();
+  config.hardwareId = config.hardwareId.trim();
+  config.expiresAt = config.expiresAt.trim();
+
   if (controllers != null) {
     controllers[0].text = config.idServer;
     controllers[1].text = config.relayServer;
@@ -3492,6 +3531,10 @@ Future<bool> setServerConfig(
   await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
   await bind.mainSetOption(key: 'api-server', value: config.apiServer);
   await bind.mainSetOption(key: 'key', value: config.key);
+  await bind.mainSetLicenseKey(licenseKey: config.licenseKey);
+  await bind.mainSetOption(key: 'hardwareId', value: config.hardwareId);
+  await bind.mainSetOption(key: 'expiresAt', value: config.expiresAt);
+
   final newApiServer = await bind.mainGetApiServer();
   if (oldApiServer.isNotEmpty &&
       oldApiServer != newApiServer &&

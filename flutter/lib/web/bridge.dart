@@ -812,7 +812,7 @@ class RustdeskImpl {
   }
 
   String mainGetAppNameSync({dynamic hint}) {
-    return js.context.callMethod('getByName', ['app-name']);
+    return 'RustDesk';
   }
 
   String mainUriPrefixSync({dynamic hint}) {
@@ -1609,28 +1609,23 @@ class RustdeskImpl {
   }
 
   bool isCustomClient({dynamic hint}) {
-    // is_custom_client() checks if app name is not "RustDesk"
-    return mainGetAppNameSync(hint: hint) != "RustDesk";
+    return false;
   }
 
   bool isDisableSettings({dynamic hint}) {
-    // Checks HARD_SETTINGS["disable-settings"] == "Y"
-    return mainGetHardOption(key: "disable-settings", hint: hint) == "Y";
+    return false;
   }
 
   bool isDisableAb({dynamic hint}) {
-    // Checks HARD_SETTINGS["disable-ab"] == "Y"
-    return mainGetHardOption(key: "disable-ab", hint: hint) == "Y";
+    return false;
   }
 
   bool isDisableGroupPanel({dynamic hint}) {
-    // Checks LocalConfig::get_option("disable-group-panel") == "Y"
-    return mainGetLocalOption(key: "disable-group-panel", hint: hint) == "Y";
+    return false;
   }
 
   bool isDisableAccount({dynamic hint}) {
-    // Checks HARD_SETTINGS["disable-account"] == "Y"
-    return mainGetHardOption(key: "disable-account", hint: hint) == "Y";
+    return false;
   }
 
   bool isDisableInstallation({dynamic hint}) {
@@ -1753,7 +1748,7 @@ class RustdeskImpl {
   }
 
   String mainGetHardOption({required String key, dynamic hint}) {
-    return mainGetLocalOption(key: key, hint: hint);
+    throw UnimplementedError("mainGetHardOption");
   }
 
   Future<void> mainCheckHwcodec({dynamic hint}) {
@@ -1826,7 +1821,7 @@ class RustdeskImpl {
   }
 
   String mainGetBuildinOption({required String key, dynamic hint}) {
-    return mainGetLocalOption(key: key, hint: hint);
+    return '';
   }
 
   String installInstallOptions({dynamic hint}) {

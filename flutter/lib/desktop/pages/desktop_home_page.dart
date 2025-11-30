@@ -15,7 +15,6 @@ import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/update_progress.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/plugin/ui_manager.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
@@ -24,6 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
+import '../../app_controller.dart';
 import '../widgets/button.dart';
 
 class DesktopHomePage extends StatefulWidget {
@@ -93,24 +93,24 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
-      FutureBuilder<Widget>(
-        future: Future.value(
-            Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
-        builder: (_, data) {
-          if (data.hasData) {
-            if (isIncomingOnly) {
-              if (isInHomePage()) {
-                Future.delayed(Duration(milliseconds: 300), () {
-                  _updateWindowSize();
-                });
-              }
-            }
-            return data.data!;
-          } else {
-            return const Offstage();
-          }
-        },
-      ),
+      // FutureBuilder<Widget>(
+      //   future: Future.value(
+      //       Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
+      //   builder: (_, data) {
+      //     if (data.hasData) {
+      //       if (isIncomingOnly) {
+      //         if (isInHomePage()) {
+      //           Future.delayed(Duration(milliseconds: 300), () {
+      //             _updateWindowSize();
+      //           });
+      //         }
+      //       }
+      //       return data.data!;
+      //     } else {
+      //       return const Offstage();
+      //     }
+      //   },
+      // ),
       buildPluginEntry(),
     ];
     if (isIncomingOnly) {
@@ -124,7 +124,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               });
             }
           },
-        ).marginOnly(bottom: 6, right: 6)
+        ).marginOnly(bottom: 6, right: 6),
       ]);
     }
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
@@ -144,7 +144,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     children: children,
                   ),
                 ),
-                Expanded(child: Container())
+                Expanded(child: Container()),
+                buildLicense(),
               ],
             ),
             if (isOutgoingOnly)
@@ -898,6 +899,74 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         ],
       ),
     );
+  }
+
+  Widget buildLicense() {
+    return Obx(() {
+      final expiresAt = AppController.to.expiresAt.value;
+      if (expiresAt.isNotEmpty) {
+        int? daysLeft;
+        String display = '';
+        try {
+          // Support multiple formats: ISO (yyyy-MM-dd),
+          // and common local formats like dd/MM/yyyy or dd-MM-yyyy,
+          // and optionally with time suffix (space + time).
+          DateTime? expireDate;
+          String s = expiresAt.trim();
+          // If there's a time part, drop it (we only need the date)
+          if (s.contains(' ')) {
+            s = s.split(' ')[0];
+          }
+          // Try ISO first
+          expireDate = DateTime.tryParse(s);
+          if (expireDate == null) {
+            // Try yyyy-M-d (hyphen) via regex
+            final ymd = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(s);
+            if (ymd != null) {
+              expireDate = DateTime(int.parse(ymd.group(1)!), int.parse(ymd.group(2)!), int.parse(ymd.group(3)!));
+            } else {
+              // Try d/m/y or d-m-y
+              final dmy = RegExp(r'^(\d{1,2})[\\/\-](\d{1,2})[\\/\-](\d{4})').firstMatch(s);
+              if (dmy != null) {
+                expireDate = DateTime(int.parse(dmy.group(3)!), int.parse(dmy.group(2)!), int.parse(dmy.group(1)!));
+              }
+            }
+          }
+          if (expireDate != null) {
+            final now = DateTime.now();
+            // Use inclusive day count (+1) so "today" counts as 1 day left
+            daysLeft = expireDate.difference(now).inDays + 1;
+            if (daysLeft <= 0) {
+              display = translate('License expired short');
+            } else {
+              // translate returns a string with placeholder {days}
+              display = translate('License days left').replaceAll('{days}', daysLeft.toString());
+            }
+          } else {
+            display = 'License: $expiresAt';
+          }
+        } catch (e) {
+          display = 'License: $expiresAt';
+        }
+        return Padding(
+          padding: const EdgeInsets.only(left: 12.0, bottom: 12.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Text(
+                display,
+                textAlign: TextAlign.left,
+                style: TextStyle(
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      return SizedBox();
+    });
   }
 }
 

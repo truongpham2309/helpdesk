@@ -690,20 +690,9 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
-    double sizeScale = s;
-    if (widget.ffi.ffiModel.isPeerLinux) {
-      final displays = widget.ffi.ffiModel.pi.getCurDisplays();
-      if (displays.isNotEmpty) {
-        sizeScale = s / displays[0].scale;
-      }
-    }
     return CustomPaint(
       size: Size(c.size.width, c.size.height),
-      painter: ImagePainter(
-          image: m.image,
-          x: c.x / sizeScale,
-          y: c.y / sizeScale,
-          scale: sizeScale),
+      painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
     );
   }
 
@@ -716,19 +705,17 @@ class _ImagePaintState extends State<ImagePaint> {
     if (rect == null) {
       return Container();
     }
-    final isPeerLinux = ffiModel.isPeerLinux;
     final curDisplay = ffiModel.pi.currentDisplay;
     for (var i = 0; i < displays.length; i++) {
       final textureId = widget.ffi.textureModel
           .getTextureId(curDisplay == kAllDisplayValue ? i : curDisplay);
       if (true) {
         // both "textureId.value != -1" and "true" seems ok
-        final sizeScale = isPeerLinux ? s / displays[i].scale : s;
         children.add(Positioned(
           left: (displays[i].x - rect.left) * s + offset.dx,
           top: (displays[i].y - rect.top) * s + offset.dy,
-          width: displays[i].width * sizeScale,
-          height: displays[i].height * sizeScale,
+          width: displays[i].width * s,
+          height: displays[i].height * s,
           child: Obx(() => Texture(
                 textureId: textureId.value,
                 filterQuality:

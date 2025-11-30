@@ -149,14 +149,8 @@ void setTemporaryPasswordLengthDialog(
 
 void showServerSettings(OverlayDialogManager dialogManager,
     void Function(VoidCallback) setState) async {
-  Map<String, dynamic> options = {};
-  try {
-    options = jsonDecode(await bind.mainGetOptions());
-  } catch (e) {
-    print("Invalid server config: $e");
-  }
-  showServerSettingsWithValue(
-      ServerConfig.fromOptions(options), dialogManager, setState);
+  ServerConfig? serverConfig = await getServerConfig();
+  showServerSettingsWithValue(serverConfig ?? ServerConfig(), dialogManager, setState);
 }
 
 void showServerSettingsWithValue(
@@ -173,35 +167,10 @@ void showServerSettingsWithValue(
   RxString relayServerMsg = ''.obs;
   RxString apiServerMsg = ''.obs;
 
-  final controllers = [idCtrl, relayCtrl, apiCtrl, keyCtrl];
-  final errMsgs = [
-    idServerMsg,
-    relayServerMsg,
-    apiServerMsg,
-  ];
-
   dialogManager.show((setState, close, context) {
-    Future<bool> submit() async {
-      setState(() {
-        isInProgress = true;
-      });
-      bool ret = await setServerConfig(
-          null,
-          errMsgs,
-          ServerConfig(
-              idServer: idCtrl.text.trim(),
-              relayServer: relayCtrl.text.trim(),
-              apiServer: apiCtrl.text.trim(),
-              key: keyCtrl.text.trim()));
-      setState(() {
-        isInProgress = false;
-      });
-      return ret;
-    }
-
     Widget buildField(
         String label, TextEditingController controller, String errorMsg,
-        {String? Function(String?)? validator, bool autofocus = false}) {
+        {String? Function(String?)? validator, bool autofocus = false, bool enabled = true, bool obscureText = false}) {
       if (isDesktop || isWeb) {
         return Row(
           children: [
@@ -220,6 +189,8 @@ void showServerSettingsWithValue(
                 ),
                 validator: validator,
                 autofocus: autofocus,
+                enabled: enabled,
+                obscureText: obscureText,
               ).workaroundFreezeLinuxMint(),
             ),
           ],
@@ -233,6 +204,8 @@ void showServerSettingsWithValue(
           errorText: errorMsg.isEmpty ? null : errorMsg,
         ),
         validator: validator,
+        enabled: enabled,
+        obscureText: obscureText,
       ).workaroundFreezeLinuxMint();
     }
 
@@ -240,7 +213,7 @@ void showServerSettingsWithValue(
       title: Row(
         children: [
           Expanded(child: Text(translate('ID/Relay Server'))),
-          ...ServerConfigImportExportWidgets(controllers, errMsgs),
+          ...ServerConfigImportExportWidgets(),
         ],
       ),
       content: ConstrainedBox(
@@ -250,10 +223,12 @@ void showServerSettingsWithValue(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   buildField(translate('ID Server'), idCtrl, idServerMsg.value,
+                      enabled: false,
                       autofocus: true),
                   SizedBox(height: 8),
                   if (!isIOS && !isWeb) ...[
                     buildField(translate('Relay Server'), relayCtrl,
+                        enabled: false,
                         relayServerMsg.value),
                     SizedBox(height: 8),
                   ],
@@ -261,6 +236,7 @@ void showServerSettingsWithValue(
                     translate('API Server'),
                     apiCtrl,
                     apiServerMsg.value,
+                    enabled: false,
                     validator: (v) {
                       if (v != null && v.isNotEmpty) {
                         if (!(v.startsWith('http://') ||
@@ -272,7 +248,7 @@ void showServerSettingsWithValue(
                     },
                   ),
                   SizedBox(height: 8),
-                  buildField('Key', keyCtrl, ''),
+                  buildField('Key', keyCtrl, enabled: false, '', obscureText: true),
                   if (isInProgress)
                     Padding(
                       padding: EdgeInsets.only(top: 8),
@@ -286,18 +262,6 @@ void showServerSettingsWithValue(
         dialogButton('Cancel', onPressed: () {
           close();
         }, isOutline: true),
-        dialogButton(
-          'OK',
-          onPressed: () async {
-            if (await submit()) {
-              close();
-              showToast(translate('Successful'));
-              upSetState?.call(() {});
-            } else {
-              showToast(translate('Failed'));
-            }
-          },
-        ),
       ],
     );
   });
