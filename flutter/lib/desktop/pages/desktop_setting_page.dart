@@ -2338,12 +2338,12 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © 2025 - ${DateTime.now().toString().substring(0, 4)} Purslane Ltd. All Rights Reserved.\n$license',
+                            'Copyright © 2025 - ${DateTime.now().year} TruongIT.NET. All Rights Reserved.\n$license',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(
                             translate('Slogan_tip'),
-                            style: TextStyle(
+                            style: const TextStyle(
                                 fontWeight: FontWeight.w800,
                                 color: Colors.white),
                           )
