@@ -44,7 +44,9 @@ class PeerTabModel with ChangeNotifier {
     !(bind.isDisableAb() || bind.isDisableAccount()),
     !(bind.isDisableGroupPanel() || bind.isDisableAccount()),
   ]);
-  final List<bool> _isVisible = List.filled(maxTabCount, true, growable: false);
+  // Default visibility for peer tabs. Hide "Discovered" (index 2),
+  // "Address book" (index 3) and "Accessible devices" (index 4) by default.
+  final List<bool> _isVisible = List.from([true, true, false, false, false], growable: false);
   List<bool> get isVisibleEnabled => () {
         final list = _isVisible.toList();
         for (int i = 0; i < maxTabCount; i++) {

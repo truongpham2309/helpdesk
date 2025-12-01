@@ -695,21 +695,22 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 onPressed: (context) {
                   changeSocks5Proxy();
                 }),
-          if (!disabledSettings && !_hideNetwork && !_hideWebSocket)
-            SettingsTile.switchTile(
-              title: Text(translate('Use WebSocket')),
-              initialValue: _allowWebSocket,
-              onToggle: isOptionFixed(kOptionAllowWebSocket)
-                  ? null
-                  : (v) async {
-                      await mainSetBoolOption(kOptionAllowWebSocket, v);
-                      final newValue =
-                          await mainGetBoolOption(kOptionAllowWebSocket);
-                      setState(() {
-                        _allowWebSocket = newValue;
-                      });
-                    },
-            ),
+          // Hide "Use WebSocket" option on mobile by default.
+          // if (!disabledSettings && !_hideNetwork && !_hideWebSocket)
+          //   SettingsTile.switchTile(
+          //     title: Text(translate('Use WebSocket')),
+          //     initialValue: _allowWebSocket,
+          //     onToggle: isOptionFixed(kOptionAllowWebSocket)
+          //         ? null
+          //         : (v) async {
+          //             await mainSetBoolOption(kOptionAllowWebSocket, v);
+          //             final newValue =
+          //                 await mainGetBoolOption(kOptionAllowWebSocket);
+          //             setState(() {
+          //               _allowWebSocket = newValue;
+          //             });
+          //           },
+          //   ),
           if (!_isUsingPublicServer)
             SettingsTile.switchTile(
               title: Text(translate('Allow insecure TLS fallback')),
@@ -726,22 +727,23 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       });
                     },
             ),
-          if (isAndroid && !outgoingOnly && !_isUsingPublicServer)
-            SettingsTile.switchTile(
-              title: Text(translate('Disable UDP')),
-              initialValue: _disableUdp,
-              onToggle: isOptionFixed(kOptionDisableUdp)
-                  ? null
-                  : (v) async {
-                      await bind.mainSetOption(
-                          key: kOptionDisableUdp, value: v ? 'Y' : 'N');
-                      final newValue =
-                          bind.mainGetOptionSync(key: kOptionDisableUdp) == 'Y';
-                      setState(() {
-                        _disableUdp = newValue;
-                      });
-                    },
-            ),
+          // Hide "Disable UDP" option on mobile by default.
+          // if (isAndroid && !outgoingOnly && !_isUsingPublicServer)
+          //   SettingsTile.switchTile(
+          //     title: Text(translate('Disable UDP')),
+          //     initialValue: _disableUdp,
+          //     onToggle: isOptionFixed(kOptionDisableUdp)
+          //         ? null
+          //         : (v) async {
+          //             await bind.mainSetOption(
+          //                 key: kOptionDisableUdp, value: v ? 'Y' : 'N');
+          //             final newValue =
+          //                 bind.mainGetOptionSync(key: kOptionDisableUdp) == 'Y';
+          //             setState(() {
+          //               _disableUdp = newValue;
+          //             });
+          //           },
+          //   ),
           if (!incomingOnly)
             SettingsTile.switchTile(
               title: Text(translate('Enable UDP hole punching')),
