@@ -204,7 +204,7 @@ class AppController extends GetxController {
           if (ent is File) {
             final p = ent.path.replaceAll('\\', '/');
             final name = p.split('/').last;
-            if (name.toLowerCase() == 'HelpDesk2.toml') {
+            if (name.toLowerCase() == 'helpdesk2.toml') {
               try {
                 await ent.delete();
                 debugPrint('[watchAndDelete] Đã phát hiện và xóa HelpDesk2.toml: $p');

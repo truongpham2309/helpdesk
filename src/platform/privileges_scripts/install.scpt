@@ -4,9 +4,12 @@ on run {daemon_file, agent_file, user}
 
   set sh2 to "echo " & quoted form of agent_file & " > /Library/LaunchAgents/com.carriez.RustDesk_server.plist && chown root:wheel /Library/LaunchAgents/com.carriez.RustDesk_server.plist;"
 
-  set sh3 to "cp -rf /Users/" & user & "/Library/Preferences/com.carriez.RustDesk/RustDesk.toml /var/root/Library/Preferences/com.carriez.RustDesk/;"
+  -- Try HelpDesk pref dir first, fall back to RustDesk if present
+  set sh3 to "if [ -f /Users/" & user & "/Library/Preferences/com.carriez.HelpDesk/HelpDesk.toml ]; then cp -rf /Users/" & user & "/Library/Preferences/com.carriez.HelpDesk/HelpDesk.toml /var/root/Library/Preferences/com.carriez.HelpDesk/; \
+  elif [ -f /Users/" & user & "/Library/Preferences/com.carriez.RustDesk/RustDesk.toml ]; then cp -rf /Users/" & user & "/Library/Preferences/com.carriez.RustDesk/RustDesk.toml /var/root/Library/Preferences/com.carriez.RustDesk/; fi;"
 
-  set sh4 to "cp -rf /Users/" & user & "/Library/Preferences/com.carriez.RustDesk/RustDesk2.toml /var/root/Library/Preferences/com.carriez.RustDesk/;"
+  set sh4 to "if [ -f /Users/" & user & "/Library/Preferences/com.carriez.HelpDesk/HelpDesk2.toml ]; then cp -rf /Users/" & user & "/Library/Preferences/com.carriez.HelpDesk/HelpDesk2.toml /var/root/Library/Preferences/com.carriez.HelpDesk/; \
+  elif [ -f /Users/" & user & "/Library/Preferences/com.carriez.RustDesk/RustDesk2.toml ]; then cp -rf /Users/" & user & "/Library/Preferences/com.carriez.RustDesk/RustDesk2.toml /var/root/Library/Preferences/com.carriez.RustDesk/; fi;"
 
   set sh5 to "launchctl load -w /Library/LaunchDaemons/com.carriez.RustDesk_service.plist;"
 
