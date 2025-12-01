@@ -5,7 +5,7 @@ authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+default-run = "helpdesk"
 rust-version = "1.75"
 
 [lib]
@@ -19,6 +19,10 @@ path = "src/naming.rs"
 [[bin]]
 name = "service"
 path = "src/service.rs"
+
+[[bin]]
+name = "helpdesk"
+path = "src/main.rs"
 
 [features]
 inline = []
