@@ -968,7 +968,7 @@ pub fn get_app_name() -> String {
 
 #[inline]
 pub fn is_rustdesk() -> bool {
-    hbb_common::config::APP_NAME.read().unwrap().eq("RustDesk")
+    hbb_common::config::APP_NAME.read().unwrap().eq("HelpDesk")
 }
 
 #[inline]
@@ -1051,7 +1051,7 @@ fn get_api_server_(api: String, custom: String) -> String {
 
 #[inline]
 pub fn is_public(url: &str) -> bool {
-    url.contains("rustdesk.com")
+    url.contains("helpdesk.truongit.net")
 }
 
 pub fn get_udp_punch_enabled() -> bool {

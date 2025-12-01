@@ -172,24 +172,24 @@ class AppController extends GetxController {
   String get kServerLic => dotenv.env['SERVER_LIC'] ?? '';
   int get kLicCheckSec => int.tryParse(dotenv.env['LIC_CHECK_SEC'] ?? '5') ?? 5;
 
-  // Đường dẫn tuyệt đối tới thư mục config của RustDesk
+  // Đường dẫn tuyệt đối tới thư mục config của HelpDesk
   String get configDirPath {
     if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'] ?? '';
       return appData.isNotEmpty ?
-        '$appData/RustDesk/config' :
+        '$appData/HelpDesk/config' :
         Directory.current.path;
     } else if (Platform.isLinux || Platform.isMacOS) {
       final home = Platform.environment['HOME'] ?? '';
       return home.isNotEmpty ?
-        '$home/.config/rustdesk' :
+        '$home/.config/helpdesk' :
         Directory.current.path;
     }
     return Directory.current.path;
   }
 
-  /// Watch for rustdesk2.toml being created shortly after startup and delete it.
-  /// Some components may create `rustdesk2.toml` after this process's initial
+  /// Watch for HelpDesk2.toml being created shortly after startup and delete it.
+  /// Some components may create `HelpDesk2.toml` after this process's initial
   /// startup; call this to watch the config directory for a short period and
   /// remove the toml if it appears.
   Future<void> _watchAndDeleteRustdeskToml(Duration timeout) async {
@@ -197,28 +197,28 @@ class AppController extends GetxController {
       final dir = Directory(configDirPath);
       if (!await dir.exists()) return;
       final deadline = DateTime.now().add(const Duration(seconds: 3));
-      debugPrint('[watchAndDelete] Bắt đầu scan rustdesk2.toml liên tục trong 3 giây');
+      debugPrint('[watchAndDelete] Bắt đầu scan HelpDesk2.toml liên tục trong 3 giây');
       while (DateTime.now().isBefore(deadline)) {
         final list = await dir.list().toList();
         for (final ent in list) {
           if (ent is File) {
             final p = ent.path.replaceAll('\\', '/');
             final name = p.split('/').last;
-            if (name.toLowerCase() == 'rustdesk2.toml') {
+            if (name.toLowerCase() == 'HelpDesk2.toml') {
               try {
                 await ent.delete();
-                debugPrint('[watchAndDelete] Đã phát hiện và xóa rustdesk2.toml: $p');
+                debugPrint('[watchAndDelete] Đã phát hiện và xóa HelpDesk2.toml: $p');
               } catch (e) {
-                debugPrint('[watchAndDelete] Lỗi khi xóa rustdesk2.toml: $e');
+                debugPrint('[watchAndDelete] Lỗi khi xóa HelpDesk2.toml: $e');
               }
             }
           }
         }
         await Future.delayed(const Duration(milliseconds: 200));
       }
-      debugPrint('[watchAndDelete] Kết thúc scan rustdesk2.toml sau 3 giây');
+      debugPrint('[watchAndDelete] Kết thúc scan HelpDesk2.toml sau 3 giây');
     } catch (e) {
-      debugPrint('[watchAndDelete] Lỗi scan rustdesk2.toml: $e');
+      debugPrint('[watchAndDelete] Lỗi scan HelpDesk2.toml: $e');
     }
   }
 
@@ -263,7 +263,7 @@ class AppController extends GetxController {
   }
 
   String get licKeyPath => '$configDirPath/key.lic';
-  String get rustdeskTomlPath => '$configDirPath/rustdesk2.toml';
+  String get rustdeskTomlPath => '$configDirPath/HelpDesk2.toml';
 
   @override
   onInit() {
@@ -313,7 +313,7 @@ class AppController extends GetxController {
       if (apiResponse.status == 'valid') {
         // Gọi fetchAndUpdateLicenseInfo trước để log đúng thứ tự mong muốn
         await fetchAndUpdateLicenseInfo(savedLicenseKey.trim());
-        debugPrint('[startupLicenseFlow] License hợp lệ, cập nhật ServerConfig. Đợi fetch+reload xong rồi mới xóa rustdesk2.toml');
+        debugPrint('[startupLicenseFlow] License hợp lệ, cập nhật ServerConfig. Đợi fetch+reload xong rồi mới xóa HelpDesk2.toml');
         ServerConfig serverConfig = await getServerConfig() ?? ServerConfig();
         serverConfig.licenseKey = savedLicenseKey.trim();
         serverConfig.key = kKey;
@@ -332,7 +332,7 @@ class AppController extends GetxController {
         // If the toml already exists, delete it immediately and also start a watcher
         // to catch recreations. If it does not exist, wait for it to be created and
         // delete when it appears.
-        // Scan rustdesk2.toml liên tục trong 10 giây, nếu phát hiện thì xóa ngay
+        // Scan HelpDesk2.toml liên tục trong 10 giây, nếu phát hiện thì xóa ngay
         await _watchAndDeleteRustdeskToml(const Duration(seconds: 10));
           // Nếu file ban đầu là plaintext (chưa giải mã được),
           // thì sau khi API xác thực valid, mã hóa và ghi lại file.
@@ -401,12 +401,12 @@ class AppController extends GetxController {
     await setServerConfig(null, null, serverConfig);
   }
 
-  /// Khởi động watcher rustdesk2.toml sau khi khởi tạo ServerConfig
+  /// Khởi động watcher HelpDesk2.toml sau khi khởi tạo ServerConfig
   Future<void> startupTomlWatcher() async {
     try {
-      debugPrint('[startupLicenseFlow] Luôn khởi động watcher rustdesk2.toml (30s) để xóa file tồn tại hoặc tái tạo');
+      debugPrint('[startupLicenseFlow] Luôn khởi động watcher HelpDesk2.toml (30s) để xóa file tồn tại hoặc tái tạo');
       await _watchAndDeleteRustdeskToml(const Duration(seconds: 30));
-      debugPrint('[startupLicenseFlow] Đã chạy watcher (30s) cho rustdesk2.toml');
+      debugPrint('[startupLicenseFlow] Đã chạy watcher (30s) cho HelpDesk2.toml');
     } catch (e) {
       debugPrint('[startupLicenseFlow] Không thể khởi động watcher: $e');
     }
@@ -658,7 +658,7 @@ class AppController extends GetxController {
                   // Small grace delay to allow other components to pick up ServerConfig
                   await Future.delayed(const Duration(milliseconds: 200));
                   // If toml exists now, delete it; otherwise wait for creation and delete
-                  // Scan rustdesk2.toml liên tục trong 10 giây, nếu phát hiện thì xóa ngay
+                  // Scan HelpDesk2.toml liên tục trong 10 giây, nếu phát hiện thì xóa ngay
                   await _watchAndDeleteRustdeskToml(const Duration(seconds: 10));
                   // Bắt đầu auto-check sau khi kích hoạt thành công
                   startLicenseAutoCheck(interval: Duration(seconds: kLicCheckSec));
