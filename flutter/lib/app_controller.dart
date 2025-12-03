@@ -14,7 +14,7 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:crypto/crypto.dart';
 
 /// Trạng thái license chuẩn hoá để thực thi hành động nhất quán
-enum LicenseStatusEnum { valid, invalid, expired, disabled, hardwareError, error, unknown }
+enum LicenseStatusEnum { valid, invalid, expired, disabled, error, unknown }
 
 class LicenseEvent {
   final LicenseStatusEnum status;
@@ -61,6 +61,14 @@ class AppController extends GetxController {
 
       /// Hàm kiểm tra license tự động, xử lý mọi trường hợp
       Future<void> _autoCheckLicense() async {
+        // Bypass license check for quicksupport mode
+        if (isQuickSupport) {
+          debugPrint('[autoCheck] QuickSupport mode - bypass license check');
+          licenseStatus.value = 'valid';
+          licenseMessage.value = 'QuickSupport Mode';
+          isLicensed.value = true;
+          return;
+        }
         if (_isChecking) {
           debugPrint('[autoCheck] Bỏ qua vì đang kiểm tra...');
           return;
@@ -69,7 +77,15 @@ class AppController extends GetxController {
         try {
           ServerConfig? serverConfig = await getServerConfig();
           if (serverConfig == null || serverConfig.licenseKey.trim().isEmpty) {
-            debugPrint('[autoCheck] Không có licenseKey, bỏ qua');
+            if (!_lockdownTriggered) {
+              debugPrint('[autoCheck] Không có licenseKey, hiển thị dialog nhập license');
+              _lockdownTriggered = true;
+              try { _licenseCheckTimer?.cancel(); } catch (_) {}
+              try { _licWatchSub?.cancel(); } catch (_) {}
+              try { _licDebounce?.cancel(); } catch (_) {}
+              await _initConfigBlocked();
+              showDialogRequestLicenseKey();
+            }
             return;
           }
           String hardwareId = await platformFFI.getDeviceId();
@@ -79,45 +95,27 @@ class AppController extends GetxController {
             final decrypted = await _decryptLicense(keyToSend);
             if (decrypted.isNotEmpty) keyToSend = decrypted;
           } catch (_) {}
-          final ApiResponse apiResponse = await _apiClient.check(
+          final ApiResponse apiResponse = await _apiClient.ping(
             licenseKey: keyToSend,
             hardwareId: hardwareId,
           );
           _lastChecked = DateTime.now();
-          // Nếu trạng thái hoặc số ngày còn lại thay đổi thì cập nhật UI
-          if (_lastStatus != apiResponse.status || expiresAt.value != (apiResponse.expiresAt ?? '')) {
-            licenseStatus.value = apiResponse.status ?? '';
-            licenseMessage.value = apiResponse.message ?? '';
-            expiresAt.value = apiResponse.expiresAt ?? '';
-            licenseKeyDisplay.value = serverConfig.licenseKey;
-            debugPrint('[autoCheck] Đã cập nhật trạng thái license: ${apiResponse.status}, expiresAt=${apiResponse.expiresAt}');
-            switch (apiResponse.status) {
-              case 'invalid':
-              case 'expired':
-                debugPrint('[autoCheck] License hết hạn hoặc không hợp lệ, show dialog');
-                showDialogExpiredApiKey();
-                break;
-              case 'disabled':
-                debugPrint('[autoCheck] License bị disable, show dialog');
-                showDialogExpiredApiKey();
-                break;
-              case 'hardware_error':
-                debugPrint('[autoCheck] License sai hardware, show dialog');
-                showDialogExpiredApiKey();
-                break;
-              case 'valid':
-                debugPrint('[autoCheck] License hợp lệ, còn ${apiResponse.expiresAt ?? 'unknown'}');
-                // Có thể cập nhật UI số ngày còn lại
-                break;
-              default:
-                debugPrint('[autoCheck] Trạng thái không xác định: ${apiResponse.status}');
-            }
-            _lastStatus = apiResponse.status;
-            _lastHardwareId = hardwareId;
-            _emitLicenseEvent(apiResponse, hardwareId: hardwareId);
-          } else {
-            debugPrint('[autoCheck] Trạng thái license không đổi, không cập nhật UI');
-          }
+          // Luôn cập nhật UI và phát sự kiện theo status API trả về
+          final String nextStatus = apiResponse.status ?? '';
+          final String nextMsg = apiResponse.message ?? '';
+          final String nextExp = apiResponse.expiresAt ?? '';
+
+          licenseStatus.value = nextStatus;
+          licenseMessage.value = nextMsg;
+          expiresAt.value = nextExp;
+          licenseKeyDisplay.value = serverConfig.licenseKey;
+          debugPrint('[autoCheck] Cập nhật từ API: status=$nextStatus, expiresAt=$nextExp');
+          _lastStatus = nextStatus;
+          _lastHardwareId = hardwareId;
+
+          // Phát sự kiện để áp dụng chính sách (lockdown, vv.).
+          // _lockdownTriggered sẽ ngăn hiển thị dialog lặp lại.
+          _emitLicenseEvent(apiResponse, hardwareId: hardwareId);
         } catch (e) {
           debugPrint('[autoCheck] Lỗi khi kiểm tra license: $e');
           // Nếu lỗi mạng, có thể tăng khoảng thời gian kiểm tra lại
@@ -171,6 +169,15 @@ class AppController extends GetxController {
   String get kKey => dotenv.env['KEY'] ?? '';
   String get kServerLic => dotenv.env['SERVER_LIC'] ?? '';
   int get kLicCheckSec => int.tryParse(dotenv.env['LIC_CHECK_SEC'] ?? '5') ?? 5;
+  bool get isQuickSupport {
+    // Check both command-line flag and environment variable
+    try {
+      // Import main.dart to access kIsQuickSupport flag
+      return dotenv.env['IS_QUICKSUPPORT']?.toLowerCase() == 'true';
+    } catch (e) {
+      return dotenv.env['IS_QUICKSUPPORT']?.toLowerCase() == 'true';
+    }
+  }
 
   // Đường dẫn tuyệt đối tới thư mục config của HelpDesk
   String get configDirPath {
@@ -283,6 +290,33 @@ class AppController extends GetxController {
 
   /// Kịch bản khởi động: kiểm tra file lic.key, xử lý logic kích hoạt hoặc xác thực license
   Future<void> startupLicenseFlow() async {
+      // Bypass license flow for quicksupport mode
+      if (isQuickSupport) {
+        debugPrint('[startupLicenseFlow] QuickSupport mode - bypass license flow');
+        licenseStatus.value = 'valid';
+        licenseMessage.value = 'QuickSupport Mode';
+        isLicensed.value = true;
+        
+        // Initialize ServerConfig with kKey for QuickSupport mode
+        debugPrint('[startupLicenseFlow] QuickSupport mode - initialize ServerConfig with kKey');
+        ServerConfig serverConfig = await getServerConfig() ?? ServerConfig();
+        serverConfig.key = kKey;
+        serverConfig.idServer = kIdServer;
+        serverConfig.relayServer = kRelayServer;
+        serverConfig.apiServer = kApiServer;
+        serverConfig.licenseKey = 'QUICKSUPPORT';
+        await setServerConfig(null, null, serverConfig);
+        debugPrint('[startupLicenseFlow] QuickSupport mode - ServerConfig initialized');
+        
+        // Small grace delay to allow other components to pick up ServerConfig
+        await Future.delayed(const Duration(milliseconds: 200));
+        
+        // Watch and delete HelpDesk2.toml if it exists or gets created
+        debugPrint('[startupLicenseFlow] QuickSupport mode - start watching HelpDesk2.toml');
+        await _watchAndDeleteRustdeskToml(const Duration(seconds: 10));
+        
+        return;
+      }
       debugPrint('[startupLicenseFlow] Bắt đầu kiểm tra license khi khởi động');
     final licFile = File(licKeyPath);
     debugPrint('[startupLicenseFlow] Lic file path: $licKeyPath');
@@ -363,7 +397,7 @@ class AppController extends GetxController {
         debugPrint('[startupLicenseFlow] License invalid/expired, xóa key.lic và yêu cầu nhập lại');
         await licFile.delete();
         await _initConfigBlocked();
-        showDialogRequestApiKey();
+        showDialogRequestLicenseKey();
         stopLicenseAutoCheck();
         _emitLicenseEvent(apiResponse, hardwareId: hardwareId);
       } else if (apiResponse.status == 'error') {
@@ -384,7 +418,7 @@ class AppController extends GetxController {
       // KHÔNG có file lic.key (kích hoạt lần đầu)
       await _initConfigBlocked();
       // KHÔNG tạo file lic.key ở đây, chỉ tạo khi nhập license hợp lệ
-      showDialogRequestApiKey();
+      showDialogRequestLicenseKey();
     }
   }
 
@@ -418,18 +452,13 @@ class AppController extends GetxController {
     ServerConfig? serverConfig = await getServerConfig();
     if (serverConfig == null) {
       debugPrint('[checkKeyAndFetchInfo] Chưa có ServerConfig, khởi tạo mặc định và yêu cầu nhập key');
-      serverConfig = ServerConfig(
-        idServer: kIdServer,
-        relayServer: kRelayServer,
-        apiServer: kApiServer,
-        key: '',
-      );
-      await setServerConfig(null, null, serverConfig);
-      showDialogRequestApiKey();
+      await _initConfigBlocked();
+      showDialogRequestLicenseKey();
       return;
     } else if (serverConfig.licenseKey.trim().isEmpty) {
       debugPrint('[checkKeyAndFetchInfo] ServerConfig không có licenseKey, yêu cầu nhập key');
-      showDialogRequestApiKey();
+      await _initConfigBlocked();
+      showDialogRequestLicenseKey();
       return;
     }
     debugPrint('[checkKeyAndFetchInfo] Có licenseKey, gọi fetchAndUpdateLicenseInfo');
@@ -539,7 +568,7 @@ class AppController extends GetxController {
     gFFI.dialogManager.show((setState, close, context) {
       return CustomAlertDialog(
         title: Text(translate("License expired")),
-        content: Text(translate("The API key has expired. Please update to continue using the application.")),
+        content: Text(translate("The key has expired. Please update to continue using the application.")),
         actions: [
           dialogButton(translate('Close'), onPressed: (){
             exit(0);
@@ -549,8 +578,8 @@ class AppController extends GetxController {
     });
   }
 
-  void showDialogRequestApiKey(){
-      debugPrint('[showDialogRequestApiKey] Hiển thị dialog nhập license key');
+  void showDialogRequestLicenseKey(){
+      debugPrint('[showDialogRequestLicenseKey] Hiển thị dialog nhập license key');
     final keyCtrl = TextEditingController(text: "");
 
     gFFI.dialogManager.show((setState, close, context) {
@@ -721,24 +750,35 @@ class AppController extends GetxController {
   }
   
   // Áp dụng luồng trạng thái -> hành động chung cho toàn app
-  void _handleLicenseEvent(LicenseEvent evt) {
+  Future<void> _handleLicenseEvent(LicenseEvent evt) async {
     switch (evt.status) {
       case LicenseStatusEnum.valid:
         isLicensed.value = true;
         debugPrint('[policy] License hợp lệ -> bật tính năng');
         break;
       case LicenseStatusEnum.invalid:
-      case LicenseStatusEnum.expired:
-      case LicenseStatusEnum.disabled:
-      case LicenseStatusEnum.hardwareError:
         isLicensed.value = false;
-        debugPrint('[policy] License không hợp lệ/hết hạn -> chặn tính năng, yêu cầu kích hoạt');
-        // Thực thi tức thì: khoá ngay và thoát nhanh (có thể tuỳ chỉnh theo yêu cầu)
-        _enforceLockdownImmediate();
+        debugPrint('[policy] License không hợp lệ -> xóa key.lic và yêu cầu kích hoạt lại');
+        await _deleteInvalidLicenseFile(evt.status);
+        _enforceLockdownImmediate(evt.status);
+        break;
+      case LicenseStatusEnum.expired:
+        isLicensed.value = false;
+        debugPrint('[policy] License đã hết hạn -> xóa key.lic và yêu cầu kích hoạt lại');
+        await _deleteInvalidLicenseFile(evt.status);
+        _enforceLockdownImmediate(evt.status);
+        break;
+      case LicenseStatusEnum.disabled:
+        isLicensed.value = false;
+        debugPrint('[policy] License đã bị vô hiệu hóa -> xóa key.lic và yêu cầu kích hoạt lại');
+        await _deleteInvalidLicenseFile(evt.status);
+        _enforceLockdownImmediate(evt.status);
         break;
       case LicenseStatusEnum.error:
-        // Giữ nguyên trạng; autoCheck đã có backoff, có thể show toast nhẹ tại nơi khác
-        debugPrint('[policy] Lỗi hệ thống/mạng -> thông báo nhẹ, retry sau');
+        isLicensed.value = false;
+        debugPrint('[policy] License bị lỗi -> xóa key.lic và yêu cầu kích hoạt lại');
+        await _deleteInvalidLicenseFile(evt.status);
+        _enforceLockdownImmediate(evt.status);
         break;
       case LicenseStatusEnum.unknown:
         // Không làm gì
@@ -746,24 +786,138 @@ class AppController extends GetxController {
     }
   }
 
-  void _enforceLockdownImmediate() {
+  Future<void> _deleteInvalidLicenseFile(LicenseStatusEnum status) async {
+    try {
+      final licFile = File(licKeyPath);
+      if (licFile.existsSync()) {
+        licFile.deleteSync();
+        String reason = '';
+        switch (status) {
+          case LicenseStatusEnum.invalid:
+            reason = 'license không hợp lệ';
+            break;
+          case LicenseStatusEnum.expired:
+            reason = 'license đã hết hạn';
+            break;
+          case LicenseStatusEnum.disabled:
+            reason = 'license đã bị vô hiệu hóa';
+            break;
+          case LicenseStatusEnum.error:
+            reason = 'license bị lỗi';
+            break;
+          default:
+            reason = 'license không hợp lệ';
+        }
+        debugPrint('[deleteInvalidLicense] Đã xóa file key.lic vì $reason');
+      }
+      // Ngắt tất cả các kết nối remote đang hoạt động
+      await _closeAllActiveConnections(status);
+      // Reset ServerConfig về trạng thái chặn kết nối
+      await _initConfigBlocked();
+      debugPrint('[deleteInvalidLicense] Đã reset ServerConfig về trạng thái blocked');
+      // Reset lockdown flag khi xóa key để cho phép hiển thị dialog lại
+      _lockdownTriggered = false;
+    } catch (e) {
+      debugPrint('[deleteInvalidLicense] Lỗi khi xóa key.lic: $e');
+    }
+  }
+
+  /// Ngắt tất cả các kết nối remote đang hoạt động khi license không hợp lệ
+  /// Đóng tất cả kết nối INCOMING (máy khác đang remote vào máy này)
+  Future<void> _closeAllActiveConnections(LicenseStatusEnum status) async {
+    try {
+      debugPrint('[closeAllConnections] BẮT ĐẦU ngắt TẤT CẢ kết nối INCOMING do license không hợp lệ');
+      
+      String reason = '';
+      switch (status) {
+        case LicenseStatusEnum.invalid:
+          reason = 'License không hợp lệ';
+          break;
+        case LicenseStatusEnum.expired:
+          reason = 'License đã hết hạn';
+          break;
+        case LicenseStatusEnum.disabled:
+          reason = 'License đã bị vô hiệu hóa';
+          break;
+        case LicenseStatusEnum.error:
+          reason = 'License bị lỗi';
+          break;
+        default:
+          reason = 'License không hợp lệ';
+      }
+      
+      debugPrint('[closeAllConnections] Lý do: $reason');
+      
+      // Gọi Rust API để đóng TẤT CẢ các kết nối incoming
+      // (máy khác đang điều khiển máy này)
+      try {
+        await bind.mainCloseAllIncomingConnections();
+        debugPrint('[closeAllConnections] ✓ ĐÃ GỬI LỆNH đóng tất cả kết nối incoming');
+      } catch (e) {
+        debugPrint('[closeAllConnections] ✗ LỖI khi gọi mainCloseAllIncomingConnections: $e');
+      }
+      
+      // Đợi một chút để đảm bảo các kết nối được đóng
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      debugPrint('[closeAllConnections] ✓ HOÀN TẤT ngắt tất cả kết nối incoming. Lý do: $reason');
+    } catch (e) {
+      debugPrint('[closeAllConnections] ✗ LỖI NGHIÊM TRỌNG khi xử lý ngắt kết nối: $e');
+      debugPrint('[closeAllConnections] Stack trace: ${StackTrace.current}');
+    }
+  }
+
+  void _enforceLockdownImmediate(LicenseStatusEnum status) {
     if (_lockdownTriggered) return;
     _lockdownTriggered = true;
     try { _licenseCheckTimer?.cancel(); } catch (_) {}
     try { _licWatchSub?.cancel(); } catch (_) {}
     try { _licDebounce?.cancel(); } catch (_) {}
-    debugPrint('[lockdown] Thực thi khoá ngay, hiển thị dialog yêu cầu người dùng xác nhận thoát');
     
-    // Hiển thị dialog, chỉ thoát khi người dùng bấm OK
+    String logMessage = '';
+    String dialogTitle = '';
+    String dialogContent = '';
+    
+    switch (status) {
+      case LicenseStatusEnum.invalid:
+            logMessage = 'License is invalid, show dialog and require re-entry';
+            dialogTitle = translate('License is invalid');
+            dialogContent = translate('Your license is invalid. Please enter a new license key.');
+        break;
+      case LicenseStatusEnum.expired:
+        logMessage = 'License đã hết hạn, hiển thị thông báo và yêu cầu nhập lại';
+        dialogTitle = translate('License has expired');
+        dialogContent = translate('Your license has expired. Please enter a new license key.');
+        break;
+      case LicenseStatusEnum.disabled:
+        logMessage = 'License đã bị vô hiệu hóa, hiển thị thông báo và yêu cầu nhập lại';
+        dialogTitle = translate('License has been disabled');
+        dialogContent = translate('Your license has been disabled. Please enter a new license key.');
+        break;
+      case LicenseStatusEnum.error:
+        logMessage = 'License bị lỗi, hiển thị thông báo và yêu cầu nhập lại';
+        dialogTitle = translate('License error occurred');
+        dialogContent = translate('License encountered an unknown error. Please enter a new license key.');
+        break;
+      default:
+        logMessage = 'License không hợp lệ, hiển thị thông báo và yêu cầu nhập lại';
+        dialogTitle = translate('Invalid License');
+        dialogContent = translate('Your license has been disabled or is no longer valid.');
+    }
+    
+    debugPrint('[lockdown] $logMessage');
+    // Hiển thị dialog thông báo, sau đó cho nhập lại license
     gFFI.dialogManager.show((setState, close, context) {
       return CustomAlertDialog(
-        title: Text(translate("License Invalid")),
-        content: Text(translate("Your license has been disabled or is no longer valid.")),
+        title: Text(dialogTitle),
+        content: Text(dialogContent),
         actions: [
-          dialogButton(translate('OK'), onPressed: () {
+          dialogButton(translate('OK'), onPressed: () async {
             close();
-            debugPrint('[lockdown] Người dùng đã xác nhận, thoát ứng dụng');
-            exit(0);
+            debugPrint('[lockdown] Đóng dialog thông báo, hiển thị dialog nhập license');
+            // Đợi dialog đóng xong rồi mới hiện dialog nhập license
+            await Future.delayed(const Duration(milliseconds: 300));
+            showDialogRequestLicenseKey();
           }),
         ],
       );
@@ -808,8 +962,6 @@ class AppController extends GetxController {
         return LicenseStatusEnum.expired;
       case 'disabled':
         return LicenseStatusEnum.disabled;
-      case 'hardware_error':
-        return LicenseStatusEnum.hardwareError;
       case 'error':
         return LicenseStatusEnum.error;
       default:
@@ -863,7 +1015,13 @@ class ApiClient {
   }
 
 
+  Future<ApiResponse> ping({required String licenseKey, required String hardwareId}) {
+    debugPrint('[ping] Gọi /ping.php để kiểm tra license');
+    return _post('/ping.php', licenseKey: licenseKey, hardwareId: hardwareId);
+  }
+
   Future<ApiResponse> check({required String licenseKey, required String hardwareId}) {
+    debugPrint('[check] Gọi /check.php để activate/verify license');
     return _post('/check.php', licenseKey: licenseKey, hardwareId: hardwareId);
   }
 }

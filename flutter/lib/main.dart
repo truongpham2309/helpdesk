@@ -36,6 +36,7 @@ import 'package:flutter_hbb/plugin/handlers.dart'
 int? kWindowId;
 WindowType? kWindowType;
 late List<String> kBootArgs;
+bool kIsQuickSupport = false;
 
 Future<void> main(List<String> args) async {
   earlyAssert();
@@ -43,6 +44,13 @@ Future<void> main(List<String> args) async {
 
   debugPrint("launch args: $args");
   kBootArgs = List.from(args);
+  
+  // Check for quicksupport mode via dart-define or command-line arg
+  kIsQuickSupport = const String.fromEnvironment('QUICKSUPPORT') == 'true' || 
+                    args.contains('--quicksupport');
+  if (kIsQuickSupport) {
+    debugPrint("QuickSupport mode enabled");
+  }
 
   if (!isDesktop) {
     runMobileApp();
@@ -130,8 +138,26 @@ Future<void> initEnv(String appType) async {
   _registerEventHandler();
   // Update the system theme.
   updateSystemWindowTheme();
-  // Load file .env
-  await dotenv.load(fileName: ".env");
+  // Load file .env (or .env.quicksupport if flag is set)
+  final envFile = kIsQuickSupport ? ".env.quicksupport" : ".env";
+  try {
+    await dotenv.load(fileName: envFile);
+    debugPrint("Loaded environment from: $envFile");
+  } catch (e) {
+    debugPrint("Failed to load $envFile, trying fallback to .env: $e");
+    if (kIsQuickSupport) {
+      // Fallback to .env if .env.quicksupport not found
+      try {
+        await dotenv.load(fileName: ".env");
+        debugPrint("Loaded fallback environment from: .env");
+        // Override with quicksupport flag
+        dotenv.env['IS_QUICKSUPPORT'] = 'true';
+        debugPrint("QuickSupport mode forced via flag");
+      } catch (e2) {
+        debugPrint("Failed to load any .env file: $e2");
+      }
+    }
+  }
    // Set default language to Vietnamese if no language is set
   final hideServerMenu = dotenv.get('HIDE_SERVER_MENU', fallback: 'false') == 'true';
   await bind.mainSetLocalOption(key: 'hide-server-menu', value: hideServerMenu ? 'Y' : '');
@@ -148,7 +174,9 @@ void runMainApp(bool startService) async {
   checkUpdate();
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
-  if (startService) {
+  // Auto-start service in quicksupport mode (check both flag and env)
+  final isQuickSupport = kIsQuickSupport || dotenv.env['IS_QUICKSUPPORT']?.toLowerCase() == 'true';
+  if (startService || isQuickSupport) {
     gFFI.serverModel.startService();
     bind.pluginSyncUi(syncTo: kAppTypeMain);
     bind.pluginListReload();
@@ -164,11 +192,20 @@ void runMainApp(bool startService) async {
   }
 
   // Set window option.
+  // QuickSupport mode: smaller window size
+  final windowSize = isQuickSupport ? Size(380, 450) : null;
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-      isMainWindow: true, alwaysOnTop: alwaysOnTop);
+      isMainWindow: true, 
+      alwaysOnTop: alwaysOnTop, 
+      size: windowSize,
+      maximizable: isQuickSupport ? false : null,
+      minimizable: isQuickSupport ? false : null,
+      isQuickSupport: isQuickSupport);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     // Restore the location of the main window before window hide or show.
-    await restoreWindowPosition(WindowType.Main);
+    if (!isQuickSupport) {
+      await restoreWindowPosition(WindowType.Main);
+    }
     // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
     final handledByUniLinks = await initUniLinks();
     debugPrint("handled by uni links: $handledByUniLinks");
@@ -179,11 +216,20 @@ void runMainApp(bool startService) async {
       windowManager.focus();
       // Move registration of active main window here to prevent from async visible check.
       rustDeskWinManager.registerActiveWindow(kWindowMainId);
+      // Center window for QuickSupport mode
+      if (isQuickSupport) {
+        windowManager.center();
+      }
     }
     windowManager.setOpacity(1);
     windowManager.setTitle(getWindowName());
     // Do not use `windowManager.setResizable()` here.
-    setResizable(!bind.isIncomingOnly());
+    setResizable(!bind.isIncomingOnly() && !isQuickSupport);
+    // Disable maximize and minimize buttons for QuickSupport mode
+    if (isQuickSupport) {
+      windowManager.setMaximizable(false);
+      windowManager.setMinimizable(false);
+    }
   });
 }
 
@@ -416,10 +462,14 @@ WindowOptions getHiddenTitleBarWindowOptions(
     {bool isMainWindow = false,
     Size? size,
     bool center = false,
-    bool? alwaysOnTop}) {
-  var defaultTitleBarStyle = TitleBarStyle.hidden;
+    bool? alwaysOnTop,
+    bool? maximizable,
+    bool? minimizable,
+    bool isQuickSupport = false}) {
+  // Force hidden title bar for QuickSupport mode
+  var defaultTitleBarStyle = isQuickSupport ? TitleBarStyle.hidden : TitleBarStyle.hidden;
   // we do not hide titlebar on win7 because of the frame overflow.
-  if (kUseCompatibleUiMode) {
+  if (kUseCompatibleUiMode && !isQuickSupport) {
     defaultTitleBarStyle = TitleBarStyle.normal;
   }
   return WindowOptions(

@@ -1884,6 +1884,17 @@ pub fn main_start_service() {
     }
 }
 
+/// Close all incoming connections (other devices controlling this machine)
+pub fn main_close_all_incoming_connections() {
+    log::info!("[main_close_all_incoming_connections] Sending CloseAllConnections IPC message to connection manager");
+    
+    // Send IPC message to connection manager to close all connections
+    // This will be handled by the service process that manages the actual connections
+    send_to_cm(&crate::ipc::Data::CloseAllConnections);
+    
+    log::info!("[main_close_all_incoming_connections] CloseAllConnections message sent via IPC");
+}
+
 pub fn main_update_temporary_password() {
     update_temporary_password();
 }

@@ -20,6 +20,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../utils/multi_window_manager.dart';
+import '../../app_controller.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kIconSize = 18;
@@ -782,7 +783,7 @@ class WindowActionPanelState extends State<WindowActionPanel> {
                   },
                   isClose: false,
                 ),
-              if (widget.showMaximize && !isMacOS)
+              if (widget.showMaximize && !isMacOS && !AppController.to.isQuickSupport)
                 Obx(() => ActionIcon(
                       message: stateGlobal.isMaximized.isTrue
                           ? 'Restore'

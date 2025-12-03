@@ -490,6 +490,18 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     LocalConfig::set_option("lang".to_owned(), lang);
                                     self.cm.change_language();
                                 }
+                                Data::CloseAllConnections => {
+                                    log::info!("[CM] Received CloseAllConnections - broadcasting to all clients");
+                                    // Get all clients from the global CLIENTS map
+                                    let clients = CLIENTS.read().unwrap();
+                                    log::info!("[CM] Found {} clients to close", clients.len());
+                                    
+                                    // Send Close message to each client
+                                    for (id, client) in clients.iter() {
+                                        log::info!("[CM] Sending Close to client id: {}", id);
+                                        allow_err!(client.tx.send(Data::Close));
+                                    }
+                                }
                                 Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show)) => {
                                     self.cm.show_elevation(show);
                                 }

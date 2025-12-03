@@ -220,6 +220,7 @@ pub enum Data {
     MouseMoveTime(i64),
     Authorize,
     Close,
+    CloseAllConnections, // Close all incoming connections (license lockdown)
     #[cfg(windows)]
     SAS,
     UserSid(Option<u32>),

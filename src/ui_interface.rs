@@ -1290,7 +1290,7 @@ pub fn option_synced() -> bool {
 #[cfg(any(target_os = "android", feature = "flutter"))]
 #[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
-pub(crate) async fn send_to_cm(data: &ipc::Data) {
+pub async fn send_to_cm(data: &ipc::Data) {
     if let Ok(mut c) = ipc::connect(1000, "_cm").await {
         c.send(data).await.ok();
     }

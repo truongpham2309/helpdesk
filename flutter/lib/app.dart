@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app_controller.dart';
 import 'common.dart';
 import 'desktop/pages/desktop_tab_page.dart';

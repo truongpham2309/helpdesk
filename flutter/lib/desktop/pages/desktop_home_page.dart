@@ -15,6 +15,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/update_progress.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/plugin/ui_manager.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
@@ -23,6 +24,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../app_controller.dart';
 import '../widgets/button.dart';
 
@@ -55,18 +57,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   final RxBool _block = false.obs;
 
   final GlobalKey _childKey = GlobalKey();
+  
+  bool get isQuickSupportMode => AppController.to.isQuickSupport;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
+    final showConnectionPane = !isIncomingOnly && !isQuickSupportMode;
     return _buildBlock(
         child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildLeftPane(context),
-        if (!isIncomingOnly) const VerticalDivider(width: 1),
-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+        if (showConnectionPane) const VerticalDivider(width: 1),
+        if (showConnectionPane) Expanded(child: buildRightPane(context)),
       ],
     ));
   }
@@ -86,13 +91,43 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           alignment: Alignment.center,
           child: loadPowered(context),
         ),
-      Align(
-        alignment: Alignment.center,
-        child: loadLogo(),
-      ),
+      if (isQuickSupportMode)
+        Align(
+          alignment: Alignment.center,
+          child: InkWell(
+            onTap: () async {
+              final Uri url = Uri.parse('http://helpdesk.truongit.net');
+              await launchUrl(url);
+            },
+            child: Text(
+              'Powered by TruongIT.NET',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ).marginOnly(bottom: 0),
+      if (isQuickSupportMode)
+        Align(
+          alignment: Alignment.center,
+          child: SvgPicture.asset(
+            'assets/logo.svg',
+            width: 64,
+            height: 64,
+          ),
+        ).marginOnly(bottom: 0),
+      if (!isQuickSupportMode)
+        Align(
+          alignment: Alignment.center,
+          child: loadLogo(),
+        ).marginOnly(bottom: isQuickSupportMode ? 4 : 0),
       buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
+      if (isQuickSupportMode && !bind.mainIsInstalled()) buildInstallButton(context),
       // FutureBuilder<Widget>(
       //   future: Future.value(
       //       Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
@@ -111,7 +146,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       //     }
       //   },
       // ),
-      buildPluginEntry(),
+      if (!isQuickSupportMode) buildPluginEntry(),
     ];
     if (isIncomingOnly) {
       children.addAll([
@@ -131,7 +166,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: isIncomingOnly ? 280.0 : 200.0,
+        width: isQuickSupportMode ? 380.0 : (isIncomingOnly ? 280.0 : 200.0),
         color: Theme.of(context).colorScheme.background,
         child: Stack(
           children: [
@@ -148,6 +183,53 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 buildLicense(),
               ],
             ),
+            if (isQuickSupportMode)
+              Positioned(
+                bottom: 12,
+                left: 20,
+                child: Obx(() {
+                  final svcStopped = Get.find<RxBool>(tag: 'stop-service').value;
+                  final svcStatus = stateGlobal.svcStatus.value;
+                  
+                  String statusText;
+                  Color statusColor;
+                  
+                  if (svcStopped) {
+                    statusText = translate("Service is not running");
+                    statusColor = kColorWarn;
+                  } else if (svcStatus == SvcStatus.connecting) {
+                    statusText = translate("connecting_status");
+                    statusColor = kColorWarn;
+                  } else if (svcStatus == SvcStatus.notReady) {
+                    statusText = translate("not_ready_status");
+                    statusColor = Color.fromARGB(255, 224, 79, 95);
+                  } else {
+                    statusText = translate('Ready');
+                    statusColor = Color(0xFF32BEA6);
+                  }
+                  
+                  return Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: statusColor,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
             if (isOutgoingOnly)
               Positioned(
                 bottom: 6,
@@ -190,8 +272,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
+    final isQuickSupport = isQuickSupportMode;
     return Container(
-      margin: const EdgeInsets.only(left: 20, right: 11),
+      margin: EdgeInsets.only(
+        left: isQuickSupport ? 20 : 20,
+        right: isQuickSupport ? 20 : 11,
+        top: isQuickSupport ? 6 : 0,
+        bottom: isQuickSupport ? 0 : 0,
+      ),
       height: 57,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -223,7 +311,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   ?.color
                                   ?.withOpacity(0.5)),
                         ).marginOnly(top: 5),
-                        buildPopupMenu(context)
+                        if (!isQuickSupportMode) buildPopupMenu(context)
                       ],
                     ),
                   ),
@@ -297,8 +385,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     final showOneTime = model.approveMode != 'click' &&
         model.verificationMethod != kUsePermanentPassword;
+    final isQuickSupport = isQuickSupportMode;
     return Container(
-      margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
+      margin: EdgeInsets.only(
+        left: isQuickSupport ? 20 : 20,
+        right: isQuickSupport ? 20 : 16,
+        top: isQuickSupport ? 10 : 13,
+        bottom: isQuickSupport ? 0 : 13,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
@@ -374,8 +468,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                               ).marginOnly(right: 8, top: 4),
                             ),
                           ),
-                          onTap: () => DesktopSettingPage.switch2page(
-                              SettingsTabKey.safety),
+                          onTap: () => setPasswordDialog(),
                           onHover: (value) => editHover.value = value,
                         ),
                     ],
@@ -391,9 +484,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildTip(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
+    final isQuickSupport = isQuickSupportMode;
     return Padding(
-      padding:
-          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
+      padding: EdgeInsets.only(
+        left: isQuickSupport ? 20 : 20, 
+        right: isQuickSupport ? 20 : 16, 
+        top: isQuickSupport ? 8 : 16, 
+        bottom: isQuickSupport ? 4 : 5
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,25 +503,32 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   alignment: Alignment.centerLeft,
                   child: Text(
                     translate("Your Desktop"),
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontSize: isQuickSupport ? 19 : null,
+                      fontWeight: isQuickSupport ? FontWeight.w500 : null,
+                    ),
                   ),
                 ),
             ],
           ),
           SizedBox(
-            height: 10.0,
+            height: isQuickSupport ? 6 : 10,
           ),
           if (!isOutgoingOnly)
             Text(
               translate("desk_tip"),
               overflow: TextOverflow.clip,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontSize: isQuickSupport ? 12 : null,
+              ),
             ),
           if (isOutgoingOnly)
             Text(
               translate("outgoing_only_desk_tip"),
               overflow: TextOverflow.clip,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontSize: isQuickSupport ? 12 : null,
+              ),
             ),
         ],
       ),
@@ -434,11 +539,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
-        bind.mainUriPrefixSync().contains('rustdesk')) {
+        bind.mainUriPrefixSync().contains('helpdesk')) {
       final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
       String btnText = isToUpdate ? 'Update' : 'Download';
       GestureTapCallback onPressed = () async {
-        final Uri url = Uri.parse('https://rustdesk.com/download');
+        final Uri url = Uri.parse('https://helpdesk.truongit.net/download');
         await launchUrl(url);
       };
       if (isToUpdate) {
@@ -705,6 +810,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (v != svcStopped.value) {
         svcStopped.value = v;
         setState(() {});
+      }
+      // Update service status
+      final status = jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
+      final statusNum = status['status_num'] as int;
+      if (statusNum == 0) {
+        stateGlobal.svcStatus.value = SvcStatus.connecting;
+      } else if (statusNum == -1) {
+        stateGlobal.svcStatus.value = SvcStatus.notReady;
+      } else if (statusNum == 1) {
+        stateGlobal.svcStatus.value = SvcStatus.ready;
+      } else {
+        stateGlobal.svcStatus.value = SvcStatus.notReady;
       }
       if (watchIsCanScreenRecording) {
         if (bind.mainIsCanScreenRecording(prompt: false)) {
@@ -1018,14 +1135,15 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate("Set Password")),
+      title: Text(translate("Set Password"), style: TextStyle(fontSize: 18)),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 500),
+        constraints: const BoxConstraints(minWidth: 520, maxWidth: 520),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(
-              height: 8.0,
+              height: 16.0,
             ),
             Row(
               children: [
@@ -1107,4 +1225,38 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
       onCancel: close,
     );
   });
+}
+
+Widget buildInstallButton(BuildContext context) {
+  return Container(
+    margin: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 8),
+    child: SizedBox(
+      width: double.infinity,
+      height: 42,
+      child: ElevatedButton.icon(
+        icon: Icon(Icons.download, size: 18),
+        label: Text(
+          translate('Install'),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        onPressed: () async {
+          try {
+            // Gọi hàm install service
+            await bind.installInstallMe(options: '', path: '');
+            showToast(translate('Installation Successful!'));
+          } catch (e) {
+            showToast(translate('Installation failed!'));
+            debugPrint('[Install] Error: $e');
+          }
+        },
+      ),
+    ),
+  );
 }
