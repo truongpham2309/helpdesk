@@ -101,7 +101,7 @@ fn load_plugin_in_app_path(dll_name: &str) -> Result<Library, LibError> {
 
 /// FFI for rustdesk core's main entry.
 /// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
-#[cfg(not(windows))]
+#[cfg(not(target_os = "windows"))]
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main() -> bool {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -121,7 +121,13 @@ pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
     crate::platform::macos::handle_application_should_open_untitled_file();
 }
 
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
+#[no_mangle]
+pub extern "C" fn test_export() -> i32 {
+    42
+}
+
+#[cfg(target_os = "windows")]
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {
     unsafe { std::ptr::write(args_len, 0) };
@@ -137,7 +143,7 @@ pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_c
 }
 
 // https://gist.github.com/iskakaushik/1c5b8aa75c77479c33c4320913eebef6
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 fn rust_args_to_c_args(args: Vec<String>, outlen: *mut c_int) -> *mut *mut c_char {
     let mut v = vec![];
 
@@ -169,6 +175,7 @@ fn rust_args_to_c_args(args: Vec<String>, outlen: *mut c_int) -> *mut *mut c_cha
     ptr
 }
 
+#[cfg(target_os = "windows")]
 #[no_mangle]
 pub unsafe extern "C" fn free_c_args(ptr: *mut *mut c_char, len: c_int) {
     let len = len as usize;

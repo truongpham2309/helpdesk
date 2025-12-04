@@ -92,33 +92,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           child: loadPowered(context),
         ),
       if (isQuickSupportMode)
-        Align(
-          alignment: Alignment.center,
-          child: InkWell(
-            onTap: () async {
-              final Uri url = Uri.parse('http://helpdesk.truongit.net');
-              await launchUrl(url);
-            },
-            child: Text(
-              'Powered by TruongIT.NET',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey[600],
-                decoration: TextDecoration.underline,
-              ),
+        Container(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: Center(
+            child: SvgPicture.asset(
+              'assets/logo.svg',
+              width: 64,
+              height: 64,
             ),
           ),
-        ).marginOnly(bottom: 0),
-      if (isQuickSupportMode)
-        Align(
-          alignment: Alignment.center,
-          child: SvgPicture.asset(
-            'assets/logo.svg',
-            width: 64,
-            height: 64,
-          ),
-        ).marginOnly(bottom: 0),
+        ),
       if (!isQuickSupportMode)
         Align(
           alignment: Alignment.center,
@@ -275,7 +258,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final isQuickSupport = isQuickSupportMode;
     return Container(
       margin: EdgeInsets.only(
-        left: isQuickSupport ? 20 : 20,
+        left: isQuickSupport ? 10 : 20,
         right: isQuickSupport ? 20 : 11,
         top: isQuickSupport ? 6 : 0,
         bottom: isQuickSupport ? 0 : 0,
@@ -388,7 +371,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final isQuickSupport = isQuickSupportMode;
     return Container(
       margin: EdgeInsets.only(
-        left: isQuickSupport ? 20 : 20,
+        left: isQuickSupport ? 10 : 20,
         right: isQuickSupport ? 20 : 16,
         top: isQuickSupport ? 10 : 13,
         bottom: isQuickSupport ? 0 : 13,
@@ -487,14 +470,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final isQuickSupport = isQuickSupportMode;
     return Padding(
       padding: EdgeInsets.only(
-        left: isQuickSupport ? 20 : 20, 
+        left: isQuickSupport ? 10 : 20, 
         right: isQuickSupport ? 20 : 16, 
         top: isQuickSupport ? 8 : 16, 
         bottom: isQuickSupport ? 4 : 5
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Column(
             children: [
@@ -1229,7 +1212,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
 
 Widget buildInstallButton(BuildContext context) {
   return Container(
-    margin: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 8),
+    margin: EdgeInsets.only(left: 10, right: 25, top: 16, bottom: 8),
     child: SizedBox(
       width: double.infinity,
       height: 42,

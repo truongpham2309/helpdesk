@@ -1,45 +1,46 @@
 # 🚀 HelpDesk - Build & Run Scripts
 
-## 📦 Bản NORMAL (Đầy đủ)
+## ⚡ QUICKSUPPORT (Không cần license)
 
-### Chạy (Run)
-```powershell
-.\run-normal.ps1
+### 1. Cấu hình
+Sửa file `flutter/.env`:
+```bash
+IS_QUICKSUPPORT=true
 ```
 
-### Build
+### 2. Chạy (Run)
 ```powershell
-.\build-normal.ps1
+Remove-Item -Recurse -Force "$env:APPDATA\HelpDesk*" -ErrorAction SilentlyContinue; cd flutter; flutter run -d windows --release
 ```
 
----
-
-## ⚡ Bản QUICKSUPPORT (Không cần license)
-
-### Chạy (Run)
+### 3. Build
 ```powershell
-.\run-quicksupport.ps1
-```
-
-### Build
-```powershell
-.\build-quicksupport.ps1
+python build.py --flutter --quicksupport
 ```
 
 ---
 
-## 📋 So sánh
+## 📦 NORMAL (Đầy đủ - Cần license)
 
-| Tính năng | NORMAL | QUICKSUPPORT |
-|-----------|--------|--------------|
-| License | ✅ Bắt buộc | ❌ Bypass |
-| Service | 🔧 Manual | ⚡ Auto |
-| Cài đặt | ✅ Yes | ❌ Portable |
-| Output | `helpdesk-{version}-install.exe` | `helpdesk-{version}-quicksupport.exe` |
+### 1. Cấu hình
+Sửa file `flutter/.env`:
+```bash
+IS_QUICKSUPPORT=false
+```
+
+### 2. Chạy (Run)
+```powershell
+Remove-Item -Recurse -Force "$env:APPDATA\HelpDesk*" -ErrorAction SilentlyContinue; cd flutter; flutter run -d windows --release
+```
+
+### 3. Build
+```powershell
+python build.py --flutter
+```
 
 ---
 
 ## 💡 Sử dụng
 
-**NORMAL**: Production, user chính thức  
-**QUICKSUPPORT**: Demo, hỗ trợ nhanh, không cần cài đặt
+**NORMAL**: Production, user chính thức, cần license  
+**QUICKSUPPORT**: Demo, hỗ trợ nhanh, không cần license

@@ -134,6 +134,11 @@ def make_parser():
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
     )
+    parser.add_argument(
+        '--quicksupport',
+        action='store_true',
+        help='Build with QUICKSUPPORT=true dart-define'
+    )
     if windows:
         parser.add_argument(
             '--skip-portable-pack',
@@ -431,14 +436,23 @@ def build_flutter_arch_manjaro(version, features):
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
 
-def build_flutter_windows(version, features, skip_portable_pack):
+def build_flutter_windows(version, features, skip_portable_pack, quicksupport=False):
     if not skip_cargo:
         system2(f'cargo build --features {features} --lib --release')
         if not os.path.exists("target/release/librustdesk.dll"):
             print("cargo build failed, please check rust source code.")
             exit(-1)
     os.chdir('flutter')
-    system2('flutter build windows --release')
+    
+    # Set environment variable for QuickSupport mode
+    if quicksupport:
+        os.environ['IS_QUICKSUPPORT'] = 'true'
+        dart_defines = '--dart-define=QUICKSUPPORT=true'
+    else:
+        os.environ.pop('IS_QUICKSUPPORT', None)
+        dart_defines = ''
+    
+    system2(f'flutter build windows --release {dart_defines}')
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
                  flutter_build_dir_2)
@@ -459,9 +473,11 @@ def build_flutter_windows(version, features, skip_portable_pack):
                   './helpdesk_portable.exe')
     print(
         f'output location: {os.path.abspath(os.curdir)}/helpdesk_portable.exe')
-    os.rename('./helpdesk_portable.exe', f'./helpdesk-{version}-install.exe')
+    
+    output_filename = f'./helpdesk-{version}-quicksupport.exe' if quicksupport else f'./helpdesk-{version}-install.exe'
+    os.rename('./helpdesk_portable.exe', output_filename)
     print(
-        f'output location: {os.path.abspath(os.curdir)}/helpdesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/{output_filename[2:]}')
 
 
 def main():
@@ -495,7 +511,7 @@ def main():
         os.chdir('../../..')
 
         if flutter:
-            build_flutter_windows(version, features, args.skip_portable_pack)
+            build_flutter_windows(version, features, args.skip_portable_pack, args.quicksupport)
             return
         system2('cargo build --release --features ' + features)
         # system2('upx.exe target/release/helpdesk.exe')

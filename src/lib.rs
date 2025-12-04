@@ -35,6 +35,8 @@ mod bridge_generated;
 pub mod flutter;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 pub mod flutter_ffi;
+#[cfg(all(target_os = "windows", not(feature = "flutter")))]
+mod windows_runner_ffi;
 use common::*;
 mod auth_2fa;
 #[cfg(feature = "cli")]

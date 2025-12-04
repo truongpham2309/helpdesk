@@ -29,6 +29,51 @@ macro_rules! my_println{
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    // Check environment variable for variant selection
+    let mut is_quicksupport = false;
+    
+    // First check system environment variable
+    if let Ok(val) = std::env::var("IS_QUICKSUPPORT") {
+        let val_lower = val.trim().to_lowercase();
+        if val_lower == "true" || val_lower == "1" {
+            is_quicksupport = true;
+        }
+    }
+    
+    // If not set from env, try to read from .env file (on desktop only)
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if !is_quicksupport {
+        // Try multiple possible locations for .env file
+        let env_paths = vec![
+            ".env",
+            "flutter/.env",
+            "../flutter/.env",
+        ];
+        for env_path in env_paths {
+            if let Ok(content) = std::fs::read_to_string(env_path) {
+                for line in content.lines() {
+                    if line.starts_with("IS_QUICKSUPPORT=") {
+                        if let Some(val) = line.split('=').nth(1) {
+                            let val_lower = val.trim().to_lowercase();
+                            if val_lower == "true" || val_lower == "1" {
+                                is_quicksupport = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if is_quicksupport {
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Set APP_NAME before any logging or initialization
+    if is_quicksupport {
+        *hbb_common::config::APP_NAME.write().unwrap() = "HelpDeskQS".to_owned();
+    }
+    
     if !crate::common::global_init() {
         return None;
     }
@@ -71,6 +116,9 @@ pub fn core_main() -> Option<Vec<String>> {
                 _is_run_as_system = true;
             } else if arg == "--quick_support" {
                 _is_quick_support = true;
+                // Set APP_NAME for QuickSupport variant
+                *hbb_common::config::APP_NAME.write().unwrap() = "HelpDeskQS".to_owned();
+                log::info!("QuickSupport mode activated - APP_NAME set to HelpDeskQS");
             } else if arg == "--no-server" {
                 no_server = true;
             } else {

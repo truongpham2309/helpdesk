@@ -170,12 +170,19 @@ class AppController extends GetxController {
   String get kServerLic => dotenv.env['SERVER_LIC'] ?? '';
   int get kLicCheckSec => int.tryParse(dotenv.env['LIC_CHECK_SEC'] ?? '5') ?? 5;
   bool get isQuickSupport {
-    // Check both command-line flag and environment variable
+    // Check environment variable from system first, then dotenv fallback
     try {
-      // Import main.dart to access kIsQuickSupport flag
-      return dotenv.env['IS_QUICKSUPPORT']?.toLowerCase() == 'true';
+      // Check system environment variable first
+      final sysEnv = Platform.environment['IS_QUICKSUPPORT']?.toLowerCase() ?? '';
+      if (sysEnv.isNotEmpty) {
+        return sysEnv == 'true' || sysEnv == '1';
+      }
+      // Fallback to dotenv if system env not set
+      final dotEnv = dotenv.env['IS_QUICKSUPPORT']?.toLowerCase() ?? '';
+      return dotEnv == 'true' || dotEnv == '1';
     } catch (e) {
-      return dotenv.env['IS_QUICKSUPPORT']?.toLowerCase() == 'true';
+      debugPrint('[isQuickSupport] Error checking env vars: $e');
+      return false;
     }
   }
 
@@ -183,14 +190,18 @@ class AppController extends GetxController {
   String get configDirPath {
     if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'] ?? '';
-      return appData.isNotEmpty ?
-        '$appData/HelpDesk/config' :
-        Directory.current.path;
+      if (appData.isEmpty) return Directory.current.path;
+      // Sử dụng thư mục riêng cho QuickSupport
+      return isQuickSupport ? 
+        '$appData/HelpDeskQS/config' :
+        '$appData/HelpDesk/config';
     } else if (Platform.isLinux || Platform.isMacOS) {
       final home = Platform.environment['HOME'] ?? '';
-      return home.isNotEmpty ?
-        '$home/.config/helpdesk' :
-        Directory.current.path;
+      if (home.isEmpty) return Directory.current.path;
+      // Sử dụng thư mục riêng cho QuickSupport
+      return isQuickSupport ?
+        '$home/.config/helpdeskqs' :
+        '$home/.config/helpdesk';
     }
     return Directory.current.path;
   }
@@ -201,29 +212,72 @@ class AppController extends GetxController {
   /// remove the toml if it appears.
   Future<void> _watchAndDeleteRustdeskToml(Duration timeout) async {
     try {
-      final dir = Directory(configDirPath);
-      if (!await dir.exists()) return;
+      // Xác định thư mục cần quét dựa trên biến thể
+      String dirToScan = '';
+      
+      if (Platform.isWindows) {
+        final appData = Platform.environment['APPDATA'] ?? '';
+        if (appData.isNotEmpty) {
+          // Nếu QuickSupport thì quét HelpDeskQS, nếu full thì quét HelpDesk
+          dirToScan = isQuickSupport ? 
+            '$appData/HelpDeskQS/config' :
+            '$appData/HelpDesk/config';
+        }
+      } else if (Platform.isLinux || Platform.isMacOS) {
+        final home = Platform.environment['HOME'] ?? '';
+        if (home.isNotEmpty) {
+          // Nếu QuickSupport thì quét helpdeskqs, nếu full thì quét helpdesk
+          dirToScan = isQuickSupport ?
+            '$home/.config/helpdeskqs' :
+            '$home/.config/helpdesk';
+        }
+      }
+      
+      // Fallback về configDirPath nếu không xác định được
+      if (dirToScan.isEmpty) {
+        dirToScan = configDirPath;
+      }
+      
+      // Chỉ xóa file *2.toml khi là QuickSupport
+      if (!isQuickSupport) {
+        debugPrint('[watchAndDelete] Bản Full - bỏ qua việc xóa file');
+        return;
+      }
+      
       final deadline = DateTime.now().add(const Duration(seconds: 3));
-      debugPrint('[watchAndDelete] Bắt đầu scan HelpDesk2.toml liên tục trong 3 giây');
+      debugPrint('[watchAndDelete] Bắt đầu scan HelpDeskQS2.toml liên tục trong 3 giây (QuickSupport)');
+      debugPrint('[watchAndDelete] Quét thư mục: $dirToScan');
+      
       while (DateTime.now().isBefore(deadline)) {
-        final list = await dir.list().toList();
-        for (final ent in list) {
-          if (ent is File) {
-            final p = ent.path.replaceAll('\\', '/');
-            final name = p.split('/').last;
-            if (name.toLowerCase() == 'helpdesk2.toml') {
-              try {
-                await ent.delete();
-                debugPrint('[watchAndDelete] Đã phát hiện và xóa HelpDesk2.toml: $p');
-              } catch (e) {
-                debugPrint('[watchAndDelete] Lỗi khi xóa HelpDesk2.toml: $e');
+        try {
+          final dir = Directory(dirToScan);
+          if (!await dir.exists()) {
+            await Future.delayed(const Duration(milliseconds: 200));
+            continue;
+          }
+          
+          final list = await dir.list().toList();
+          for (final ent in list) {
+            if (ent is File) {
+              final p = ent.path.replaceAll('\\', '/');
+              final name = p.split('/').last.toLowerCase();
+              // Xóa HelpDeskQS2.toml (hoặc helpdeskqs2.toml trên Linux)
+              if (name == 'helpdeskqs2.toml') {
+                try {
+                  await ent.delete();
+                  debugPrint('[watchAndDelete] Đã phát hiện và xóa HelpDeskQS2.toml: $p');
+                } catch (e) {
+                  debugPrint('[watchAndDelete] Lỗi khi xóa HelpDeskQS2.toml: $e');
+                }
               }
             }
           }
+        } catch (e) {
+          debugPrint('[watchAndDelete] Lỗi khi quét thư mục $dirToScan: $e');
         }
         await Future.delayed(const Duration(milliseconds: 200));
       }
-      debugPrint('[watchAndDelete] Kết thúc scan HelpDesk2.toml sau 3 giây');
+      debugPrint('[watchAndDelete] Kết thúc scan HelpDeskQS2.toml sau 3 giây');
     } catch (e) {
       debugPrint('[watchAndDelete] Lỗi scan HelpDesk2.toml: $e');
     }
@@ -269,7 +323,7 @@ class AppController extends GetxController {
     }
   }
 
-  String get licKeyPath => '$configDirPath/key.lic';
+  String get licKeyPath => isQuickSupport ? '' : '$configDirPath/key.lic';
   String get rustdeskTomlPath => '$configDirPath/HelpDesk2.toml';
 
   @override
@@ -318,6 +372,11 @@ class AppController extends GetxController {
         return;
       }
       debugPrint('[startupLicenseFlow] Bắt đầu kiểm tra license khi khởi động');
+    // Skip license file check for QuickSupport mode
+    if (licKeyPath.isEmpty) {
+      debugPrint('[startupLicenseFlow] QuickSupport mode - skip license file check');
+      return;
+    }
     final licFile = File(licKeyPath);
     debugPrint('[startupLicenseFlow] Lic file path: $licKeyPath');
     if (await licFile.exists()) {
@@ -654,7 +713,8 @@ class AppController extends GetxController {
                   hardwareId: hardwareId,
                 );
                 if(apiResponse.status == 'valid'){
-                  // Lưu file lic.key
+                  // Lưu file lic.key (skip for QuickSupport mode)
+                  if (!isQuickSupport && licKeyPath.isNotEmpty) {
                     final licFile = File(licKeyPath);
                     final enc = await _encryptLicense(keyCtrl.text.trim());
                     if (enc.isNotEmpty) {
@@ -670,6 +730,9 @@ class AppController extends GetxController {
                     } else {
                       debugPrint('[activation] Mã hóa trả về chuỗi rỗng, bỏ qua ghi file');
                     }
+                  } else {
+                    debugPrint('[activation] QuickSupport mode - skip saving key.lic');
+                  }
                   // Cập nhật ServerConfig cho phép kết nối
                   ServerConfig serverConfig = await getServerConfig() ?? ServerConfig();
                   serverConfig.licenseKey = keyCtrl.text.trim();
@@ -726,6 +789,11 @@ class AppController extends GetxController {
 
   /// Theo dõi thay đổi file key.lic để trigger kiểm tra realtime khi người dùng thay/nhập lại key
   void _startLicenseFileWatcher() {
+    // Skip watcher for QuickSupport mode
+    if (isQuickSupport || licKeyPath.isEmpty) {
+      debugPrint('[watch:key.lic] QuickSupport mode - skip file watcher');
+      return;
+    }
     try {
       final dir = Directory(configDirPath);
       if (!dir.existsSync()) return;
@@ -788,6 +856,11 @@ class AppController extends GetxController {
 
   Future<void> _deleteInvalidLicenseFile(LicenseStatusEnum status) async {
     try {
+      // Skip file deletion for QuickSupport mode
+      if (isQuickSupport || licKeyPath.isEmpty) {
+        debugPrint('[deleteInvalidLicense] QuickSupport mode - skip file deletion');
+        return;
+      }
       final licFile = File(licKeyPath);
       if (licFile.existsSync()) {
         licFile.deleteSync();

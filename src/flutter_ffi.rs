@@ -34,6 +34,11 @@ pub type SessionID = uuid::Uuid;
 lazy_static::lazy_static! {
     static ref TEXTURE_RENDER_KEY: Arc<AtomicI32> = Arc::new(AtomicI32::new(0));
 }
+#[no_mangle]
+pub extern "C" fn debug_print_quicksupport_env() {
+    let is_quicksupport = std::env::var("IS_QUICKSUPPORT").unwrap_or_else(|_| "(not set)".to_string());
+    println!("[DEBUG] IS_QUICKSUPPORT env: {}", is_quicksupport);
+}
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
     flutter::async_tasks::start_flutter_async_runner();
@@ -41,6 +46,50 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     #[cfg(not(target_os = "ios"))]
     {
         *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    }
+    // Set APP_NAME based on QUICKSUPPORT environment variable or .env file
+    let mut is_quicksupport = false;
+    
+    // First check system environment variable
+    if let Ok(val) = std::env::var("IS_QUICKSUPPORT") {
+        let val_lower = val.trim().to_lowercase();
+        if val_lower == "true" || val_lower == "1" {
+            is_quicksupport = true;
+        }
+    }
+    
+    // If not set from env, try to read from .env file (on desktop only)
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if !is_quicksupport {
+        // Try multiple possible locations for .env file
+        let env_paths = vec![
+            ".env",
+            "flutter/.env",
+            "../flutter/.env",
+        ];
+        for env_path in env_paths {
+            if let Ok(content) = std::fs::read_to_string(env_path) {
+                for line in content.lines() {
+                    if line.starts_with("IS_QUICKSUPPORT=") {
+                        if let Some(val) = line.split('=').nth(1) {
+                            let val_lower = val.trim().to_lowercase();
+                            if val_lower == "true" || val_lower == "1" {
+                                is_quicksupport = true;
+                                // Don't log here - will log after init_log
+                                break;
+                            }
+                        }
+                    }
+                }
+                if is_quicksupport {
+                    break;
+                }
+            }
+        }
+    }
+    
+    if is_quicksupport {
+        *config::APP_NAME.write().unwrap() = "HelpDeskQS".to_owned();
     }
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
     if custom_client_config.is_empty() {
@@ -78,8 +127,15 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     {
         // core_main's init_log does not work for flutter since it is only applied to its load_library in main.c
         hbb_common::init_log(false, "flutter_ffi");
+        // Log variant info AFTER init_log to ensure it goes to the correct directory
+        if is_quicksupport {
+            log::info!("Flutter FFI: APP_NAME set to HelpDeskQS (QuickSupport mode)");
+        } else {
+            log::info!("Flutter FFI: APP_NAME set to HelpDesk (Full mode)");
+        }
     }
 }
+
 
 #[inline]
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {

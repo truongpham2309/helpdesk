@@ -158,9 +158,12 @@ Future<void> initEnv(String appType) async {
       }
     }
   }
-   // Set default language to Vietnamese if no language is set
+  // Set default language to Vietnamese if no language is set
   final hideServerMenu = dotenv.get('HIDE_SERVER_MENU', fallback: 'false') == 'true';
   await bind.mainSetLocalOption(key: 'hide-server-menu', value: hideServerMenu ? 'Y' : '');
+  
+  // APP_NAME is set in Rust initialize() based on QUICKSUPPORT environment
+  
   var lang = await bind.mainGetLocalOption(key: "lang");
   if (lang.isEmpty) {
     await bind.mainSetLocalOption(key: "lang", value: "vi");
